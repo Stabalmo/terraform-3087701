@@ -36,18 +36,24 @@ module "blog_vpc" {
 module "autoscaling" {
   source  = "terraform-aws-modules/autoscaling/aws"
   version = "9.1.0"
-  # insert the 1 required variable here
 
   name     = "blog"
   min_size = 1
   max_size = 2
 
   vpc_zone_identifier = module.blog_vpc.public_subnets
-  target_group_arns   = module.blog_alb.target_group_arns
   security_groups     = [module.blog_sg.security_group_id]
 
-  image_id                 = data.aws_ami.app_ami.id
-  instance_type       = var.instance_type
+  # Attach this ASG to the ALB target group
+  traffic_source_attachments = {
+    alb = {
+      traffic_source_identifier = module.blog_alb.target_groups["ex-instance"].arn
+      traffic_source_type       = "elbv2"
+    }
+  }
+
+  image_id      = data.aws_ami.app_ami.id
+  instance_type = var.instance_type
 
 }
 
@@ -79,7 +85,9 @@ module "blog_alb" {
       protocol    = "HTTP"
       port        = 80
       target_type = "instance"
-      target_id   = aws_instance.blog.id
+
+      # Targets will be registered by the Auto Scaling Group (not a single EC2 instance)
+      create_attachment = false
     }
   }
 
